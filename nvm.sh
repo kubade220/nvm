@@ -163,7 +163,11 @@ nvm_is_version_installed() {
 
 nvm_print_npm_version() {
   if nvm_has "npm"; then
-    command printf " (npm v$(npm --version 2>/dev/null))"
+    local NPM_VERSION
+    NPM_VERSION="$(npm --version 2>/dev/null)"
+    if [ -n "${NPM_VERSION}" ]; then
+      command printf " (npm v${NPM_VERSION})"
+    fi
   fi
 }
 
@@ -332,6 +336,10 @@ nvm_install_latest_npm() {
       nvm_echo '* `npm` `v6.9` is the last version that works on `node` `v6.0.x`, `v6.1.x`, `v9.0.x`, `v9.1.x`, or `v9.2.x`'
       $NVM_NPM_CMD install -g npm@6.9
     elif [ $NVM_IS_10_OR_ABOVE -eq 0 ]; then
+      if nvm_version_greater 4.4.4 "${NPM_VERSION}"; then
+        nvm_echo '* `npm` `v4.4.4` or later is required to install npm v6.14.18'
+        $NVM_NPM_CMD install -g npm@4
+      fi
       nvm_echo '* `npm` `v6.x` is the last version that works on `node` below `v10.0.0`'
       $NVM_NPM_CMD install -g npm@6
     elif \
@@ -373,6 +381,7 @@ if [ -z "${NVM_DIR-}" ]; then
     # shellcheck disable=SC2169,SC3054
     NVM_SCRIPT_SOURCE="${BASH_SOURCE[0]}"
   fi
+  # shellcheck disable=SC2086
   NVM_DIR="$(nvm_cd ${NVM_CD_FLAGS} "$(dirname "${NVM_SCRIPT_SOURCE:-$0}")" >/dev/null && \pwd)"
   export NVM_DIR
 else
@@ -413,7 +422,7 @@ nvm_tree_contains_path() {
 nvm_find_project_dir() {
   local path_
   path_="${PWD}"
-  while [ "${path_}" != "" ] && [ ! -f "${path_}/package.json" ] && [ ! -d "${path_}/node_modules" ]; do
+  while [ "${path_}" != "" ] && [ "${path_}" != '.' ] && [ ! -f "${path_}/package.json" ] && [ ! -d "${path_}/node_modules" ]; do
     path_=${path_%/*}
   done
   nvm_echo "${path_}"
@@ -423,7 +432,7 @@ nvm_find_project_dir() {
 nvm_find_up() {
   local path_
   path_="${PWD}"
-  while [ "${path_}" != "" ] && [ ! -f "${path_}/${1-}" ]; do
+  while [ "${path_}" != "" ] && [ "${path_}" != '.' ] && [ ! -f "${path_}/${1-}" ]; do
     path_=${path_%/*}
   done
   nvm_echo "${path_}"
@@ -693,6 +702,7 @@ ${NVM_LS_REMOTE_POST_MERGED_OUTPUT}" | nvm_grep -v "N/A" | command sed '/^ *$/d'
   fi
   # the `sed` is to remove trailing whitespaces (see "weird behavior" ~25 lines up)
   nvm_echo "${VERSIONS}" | command sed 's/ *$//g'
+  # shellcheck disable=SC2317
   return $NVM_LS_REMOTE_EXIT_CODE || $NVM_LS_REMOTE_IOJS_EXIT_CODE
 }
 
@@ -886,18 +896,6 @@ nvm_wrap_with_color_code() {
   fi
 }
 
-nvm_wrap_with_color_code() {
-  local CODE
-  CODE="$(nvm_print_color_code "${1}" 2>/dev/null ||:)"
-  local TEXT
-  TEXT="${2-}"
-  if nvm_has_colors && [ -n "${CODE}" ]; then
-    nvm_echo_with_colors "\033[${CODE}${TEXT}\033[0m"
-  else
-    nvm_echo "${TEXT}"
-  fi
-}
-
 nvm_print_color_code() {
   case "${1-}" in
     '0') return 0 ;;
@@ -1074,7 +1072,7 @@ nvm_list_aliases() {
 
   (
     local ALIAS_NAME
-    for ALIAS_NAME in "$(nvm_node_prefix)" "stable" "unstable"; do
+    for ALIAS_NAME in "$(nvm_node_prefix)" "stable" "unstable" "$(nvm_iojs_prefix)"; do
       {
         # shellcheck disable=SC2030,SC2031 # (https://github.com/koalaman/shellcheck/issues/2217)
         if [ ! -f "${NVM_ALIAS_DIR}/${ALIAS_NAME}" ] && { [ -z "${ALIAS}" ] || [ "${ALIAS_NAME}" = "${ALIAS}" ]; }; then
@@ -1083,11 +1081,6 @@ nvm_list_aliases() {
       } &
     done
     wait
-    ALIAS_NAME="$(nvm_iojs_prefix)"
-    # shellcheck disable=SC2030,SC2031 # (https://github.com/koalaman/shellcheck/issues/2217)
-    if [ ! -f "${NVM_ALIAS_DIR}/${ALIAS_NAME}" ] && { [ -z "${ALIAS}" ] || [ "${ALIAS_NAME}" = "${ALIAS}" ]; }; then
-      NVM_NO_COLORS="${NVM_NO_COLORS-}" NVM_CURRENT="${NVM_CURRENT}" nvm_print_default_alias "${ALIAS_NAME}"
-    fi
   ) | sort
 
   (
@@ -1141,7 +1134,7 @@ nvm_ls_current() {
     if [ "${VERSION}" = "v0.6.21-pre" ]; then
       nvm_echo 'v0.6.21'
     else
-      nvm_echo "${VERSION}"
+      nvm_echo "${VERSION:-none}"
     fi
   else
     nvm_echo 'system'
@@ -1382,9 +1375,10 @@ nvm_ls() {
 
   if [ "${NVM_ADD_SYSTEM-}" = true ]; then
     if [ -z "${PATTERN}" ] || [ "${PATTERN}" = 'v' ]; then
-      VERSIONS="${VERSIONS}$(command printf '\n%s' 'system')"
+      VERSIONS="${VERSIONS}
+system"
     elif [ "${PATTERN}" = 'system' ]; then
-      VERSIONS="$(command printf '%s' 'system')"
+      VERSIONS="system"
     fi
   fi
 
@@ -1895,6 +1889,7 @@ nvm_get_arch() {
   local HOST_ARCH
   local NVM_OS
   local EXIT_CODE
+  local LONG_BIT
 
   NVM_OS="$(nvm_get_os)"
   # If the OS is SunOS, first try to use pkgsrc to guess
@@ -1911,22 +1906,29 @@ nvm_get_arch() {
     HOST_ARCH=ppc64
   else
     HOST_ARCH="$(command uname -m)"
+    LONG_BIT="$(getconf LONG_BIT 2>/dev/null)"
   fi
 
   local NVM_ARCH
   case "${HOST_ARCH}" in
     x86_64 | amd64) NVM_ARCH="x64" ;;
     i*86) NVM_ARCH="x86" ;;
-    aarch64) NVM_ARCH="arm64" ;;
+    aarch64 | armv8l) NVM_ARCH="arm64" ;;
     *) NVM_ARCH="${HOST_ARCH}" ;;
   esac
 
+  # If running inside a 32Bit docker container the kernel still is 64bit
+  # change ARCH to 32bit if LONG_BIT is 32
+  if [ "_${LONG_BIT}" = "_32" ] && [ "${NVM_ARCH}" = "x64" ]; then
+    NVM_ARCH="x86"
+  fi
+
   # If running a 64bit ARM kernel but a 32bit ARM userland,
   # change ARCH to 32bit ARM (armv7l) if /sbin/init is 32bit executable
-  local L
-  if [ "$(uname)" = "Linux" ] && [ "${NVM_ARCH}" = arm64 ] &&
-    L="$(command ls -dl /sbin/init 2>/dev/null)" &&
-    [ "$(od -An -t x1 -j 4 -N 1 "${L#*-> }")" = ' 01' ]; then
+  if [ "$(uname)" = "Linux" ] \
+    && [ "${NVM_ARCH}" = arm64 ] \
+    && [ "$(command od -An -t x1 -j 4 -N 1 "/sbin/init" 2>/dev/null)" = ' 01' ]\
+  ; then
     NVM_ARCH=armv7l
     HOST_ARCH=armv7l
   fi
@@ -3801,6 +3803,7 @@ nvm() {
       nvm_ensure_version_installed "${provided_version}"
       EXIT_CODE=$?
       if [ "${EXIT_CODE}" != "0" ]; then
+        # shellcheck disable=SC2086
         return $EXIT_CODE
       fi
 
@@ -3957,6 +3960,7 @@ nvm() {
       nvm_ensure_version_installed "${provided_version}"
       EXIT_CODE=$?
       if [ "${EXIT_CODE}" != "0" ]; then
+        # shellcheck disable=SC2086
         return $EXIT_CODE
       fi
       local NVM_VERSION_DIR
@@ -4169,7 +4173,7 @@ nvm() {
       NVM_VERSION_ONLY=true NVM_LTS="${NVM_LTS-}" nvm_remote_version "${PATTERN:-node}"
     ;;
     "--version" | "-v")
-      nvm_echo '0.39.2'
+      nvm_echo '0.39.3'
     ;;
     "unload")
       nvm deactivate >/dev/null 2>&1

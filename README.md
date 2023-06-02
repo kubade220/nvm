@@ -1,6 +1,6 @@
 <a href="https://github.com/nvm-sh/logos"><img alt="nvm project logo" src="https://raw.githubusercontent.com/nvm-sh/logos/HEAD/nvm-logo-color.svg" height="50" /></a>
 
-# Node Version Manager [![Build Status](https://travis-ci.org/nvm-sh/nvm.svg?branch=master)][3] [![nvm version](https://img.shields.io/badge/version-v0.39.2-yellow.svg)][4] [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/684/badge)](https://bestpractices.coreinfrastructure.org/projects/684)
+# Node Version Manager [![Build Status](https://app.travis-ci.com/nvm-sh/nvm.svg?branch=master)][3] [![nvm version](https://img.shields.io/badge/version-v0.39.3-yellow.svg)][4] [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/684/badge)](https://bestpractices.coreinfrastructure.org/projects/684)
 
 <!-- To update this table of contents, ensure you have run `npm install` then `npm run doctoc` -->
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
@@ -54,6 +54,7 @@
 - [Docker For Development Environment](#docker-for-development-environment)
 - [Problems](#problems)
 - [macOS Troubleshooting](#macos-troubleshooting)
+- [WSL Troubleshooting](#wsl-troubleshooting)
 - [Maintainers](#maintainers)
 - [License](#license)
 - [Copyright notice](#copyright-notice)
@@ -94,10 +95,10 @@ nvm is a version manager for [node.js](https://nodejs.org/en/), designed to be i
 
 To **install** or **update** nvm, you should run the [install script][2]. To do that, you may either download and run the script manually, or use the following cURL or Wget command:
 ```sh
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.2/install.sh | bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash
 ```
 ```sh
-wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.2/install.sh | bash
+wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash
 ```
 
 Running either of the above commands downloads a script and runs it. The script clones the nvm repository to `~/.nvm`, and attempts to add the source lines from the snippet below to the correct profile file (`~/.bash_profile`, `~/.zshrc`, `~/.profile`, or `~/.bashrc`).
@@ -118,6 +119,8 @@ export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || pr
 Eg: `curl ... | NVM_DIR="path/to/nvm"`. Ensure that the `NVM_DIR` does not contain a trailing slash.
 
 - The installer can use `git`, `curl`, or `wget` to download `nvm`, whichever is available.
+
+- You can instruct the installer to not edit your shell config (for example if you already get completions via a [zsh nvm plugin](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/nvm)) by setting `PROFILE=/dev/null` before running the `install.sh` script. Here's an example one-line command to do that: `PROFILE=/dev/null bash -c 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash'`
 
 #### Troubleshooting on Linux
 
@@ -165,7 +168,7 @@ You can use a task:
 ```yaml
 - name: Install nvm
   ansible.builtin.shell: >
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.2/install.sh | bash
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash
   args:
     creates: "{{ ansible_env.HOME }}/.nvm/nvm.sh"
 ```
@@ -227,7 +230,7 @@ If you have `git` installed (requires git v1.7.10+):
 
 1. clone this repo in the root of your user profile
     - `cd ~/` from anywhere then `git clone https://github.com/nvm-sh/nvm.git .nvm`
-1. `cd ~/.nvm` and check out the latest version with `git checkout v0.39.2`
+1. `cd ~/.nvm` and check out the latest version with `git checkout v0.39.3`
 1. activate `nvm` by sourcing it from your shell: `. ./nvm.sh`
 
 Now add these lines to your `~/.bashrc`, `~/.profile`, or `~/.zshrc` file to have it automatically sourced upon login:
@@ -598,8 +601,9 @@ cdnvm() {
         fi
     fi
 }
+
 alias cd='cdnvm'
-cd "$PWD"
+cdnvm "$PWD" || exit
 ```
 
 This alias would search 'up' from your current directory in order to detect a `.nvmrc` file. If it finds it, it will switch to that version; if not, it will use the default version.
@@ -614,11 +618,14 @@ Put this into your `$HOME/.zshrc` to call `nvm use` automatically whenever you e
 ```zsh
 # place this after nvm initialization!
 autoload -U add-zsh-hook
+
 load-nvmrc() {
-  local nvmrc_path="$(nvm_find_nvmrc)"
+  local nvmrc_path
+  nvmrc_path="$(nvm_find_nvmrc)"
 
   if [ -n "$nvmrc_path" ]; then
-    local nvmrc_node_version=$(nvm version "$(cat "${nvmrc_path}")")
+    local nvmrc_node_version
+    nvmrc_node_version=$(nvm version "$(cat "${nvmrc_path}")")
 
     if [ "$nvmrc_node_version" = "N/A" ]; then
       nvm install
@@ -630,6 +637,7 @@ load-nvmrc() {
     nvm use default
   fi
 }
+
 add-zsh-hook chpwd load-nvmrc
 load-nvmrc
 ```
@@ -793,13 +801,13 @@ If installing nvm on Alpine Linux *is* still what you want or need to do, you sh
 ### Alpine Linux 3.13+
 ```sh
 apk add -U curl bash ca-certificates openssl ncurses coreutils python3 make gcc g++ libgcc linux-headers grep util-linux binutils findutils
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.2/install.sh | bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash
 ```
 
 ### Alpine Linux 3.5 - 3.12
 ```sh
 apk add -U curl bash ca-certificates openssl ncurses coreutils python2 make gcc g++ libgcc linux-headers grep util-linux binutils findutils
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.2/install.sh | bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash
 ```
 
 _Note: Alpine 3.5 can only install NodeJS versions up to v6.9.5, Alpine 3.6 can only install versions up to v6.10.3, Alpine 3.7 installs versions up to v8.9.3, Alpine 3.8 installs versions up to v8.14.0, Alpine 3.9 installs versions up to v10.19.0, Alpine 3.10 installs versions up to v10.24.1, Alpine 3.11 installs versions up to v12.22.6, Alpine 3.12 installs versions up to v12.22.12, Alpine 3.13 & 3.14 install versions up to v14.20.0, Alpine 3.15 & 3.16 install versions up to v16.16.0 (**These are all versions on the main branch**). Alpine 3.5 - 3.12 required the package `python2` to build NodeJS, as they are older versions to build. Alpine 3.13+ requires `python3` to successfully build newer NodeJS versions, but you can use `python2` with Alpine 3.13+ if you need to build versions of node supported in Alpine 3.5 - 3.15, you just need to specify what version of NodeJS you need to install in the package install script._
@@ -898,10 +906,10 @@ You have to make sure that the user directory name in `$HOME` and the user direc
 To change the user directory and/or account name follow the instructions [here](https://support.apple.com/en-us/HT201548)
 
 [1]: https://github.com/nvm-sh/nvm.git
-[2]: https://github.com/nvm-sh/nvm/blob/v0.39.2/install.sh
-[3]: https://travis-ci.org/nvm-sh/nvm
-[4]: https://github.com/nvm-sh/nvm/releases/tag/v0.39.2
-[Urchin]: https://github.com/scraperwiki/urchin
+[2]: https://github.com/nvm-sh/nvm/blob/v0.39.3/install.sh
+[3]: https://app.travis-ci.com/nvm-sh/nvm
+[4]: https://github.com/nvm-sh/nvm/releases/tag/v0.39.3
+[Urchin]: https://git.sdf.org/tlevine/urchin
 [Fish]: https://fishshell.com
 
 **Homebrew makes zsh directories unsecure**
@@ -979,6 +987,40 @@ Here's what you will need to do:
   ```
 
 Now you should be able to use node as usual.
+
+## WSL Troubleshooting
+
+If you've encountered this error on WSL-2:
+
+  ```sh
+  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                  Dload  Upload  Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:--  0:00:09 --:--:--     0curl: (6) Could not resolve host: raw.githubusercontent.com
+  ```
+
+It may be due to your antivirus, VPN, or other reasons.
+
+Where you can `ping 8.8.8.8` while you can't `ping google.com`
+
+
+This could simply be solved by running this in your root directory:
+
+  ```sh
+  sudo rm /etc/resolv.conf
+  sudo bash -c 'echo "nameserver 8.8.8.8" > /etc/resolv.conf'
+  sudo bash -c 'echo "[network]" > /etc/wsl.conf'
+  sudo bash -c 'echo "generateResolvConf = false" >> /etc/wsl.conf'
+  sudo chattr +i /etc/resolv.conf
+  ```
+
+This deletes your `resolve.conf` file thats automatically generated when u run WSL, creates a new file and puts `nameserver 8.8.8.8`, then creates a `wsl.conf` file and adds `[network]` and `generateResolveConf = false` to prevent auto generation of that file.
+
+You can check the contents of the file by running:
+
+  ```sh
+  cat /etc/resolv.conf
+  ```
 
 ## Maintainers
 
